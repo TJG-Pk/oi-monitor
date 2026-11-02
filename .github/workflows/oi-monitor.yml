@@ -20,6 +20,21 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Check Telegram token (temporary)
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          python - <<'PY'
+          import os, re, requests
+          t = os.environ["TELEGRAM_BOT_TOKEN"]
+          print("length:", len(t))
+          print("has whitespace:", any(c.isspace() for c in t))
+          print("starts with bot:", t.lower().startswith("bot"))
+          print("format ok:", bool(re.fullmatch(r"\d{6,12}:[A-Za-z0-9_-]{30,}", t)))
+          r = requests.get(f"https://api.telegram.org/bot{t}/getMe", timeout=30)
+          print("getMe status:", r.status_code)
+          PY
+
       - name: Install Chromium
         run: playwright install --with-deps chromium
 
