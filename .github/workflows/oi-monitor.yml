@@ -38,7 +38,7 @@ jobs:
       # เก็บภาพไว้ในหน้า Actions ด้วย เปิดดูได้แม้ Telegram ไม่ได้รับ
       - name: Upload screenshot
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: screenshot
           path: screenshot.png
