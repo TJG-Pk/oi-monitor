@@ -61,6 +61,35 @@ def click_options(page) -> None:
         print(f"WARN: กดปุ่ม Call/Put ไม่สำเร็จ: {e}", file=sys.stderr)
 
 
+HIDE_BANNER_JS = """
+() => {
+    const text = "created by a Google Apps Script user";
+    const el = [...document.querySelectorAll("body *")]
+        .find(e => e.children.length === 0 && (e.textContent || "").includes(text));
+    if (!el) return false;
+    // ไล่ขึ้นไปหากล่องแถบเตือนทั้งแถบ (ไม่เกินความสูงของแถบ จะได้ไม่ซ่อนตัวแอป)
+    let bar = el;
+    while (bar.parentElement && bar.parentElement !== document.body
+           && bar.parentElement.offsetHeight < 80) {
+        bar = bar.parentElement;
+    }
+    bar.style.display = "none";
+    return true;
+}
+"""
+
+
+def hide_banner(page) -> None:
+    """ซ่อนแถบ 'This application was created by a Google Apps Script user' ด้านบน"""
+    try:
+        if page.evaluate(HIDE_BANNER_JS):
+            print("Hid Apps Script banner")
+        else:
+            print("WARN: ไม่พบแถบ Apps Script", file=sys.stderr)
+    except Exception as e:
+        print(f"WARN: ซ่อนแถบ Apps Script ไม่สำเร็จ: {e}", file=sys.stderr)
+
+
 def take_screenshot() -> None:
     with sync_playwright() as p:
         browser = p.chromium.launch()
@@ -71,6 +100,8 @@ def take_screenshot() -> None:
         page.goto(TARGET_URL, wait_until="networkidle", timeout=90_000)
         page.wait_for_timeout(WAIT_SECONDS * 1000)
         click_options(page)
+        hide_banner(page)
+        page.wait_for_timeout(500)
         page.screenshot(path=OUTPUT_FILE, full_page=True)
         browser.close()
 
