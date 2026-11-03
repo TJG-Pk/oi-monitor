@@ -100,9 +100,24 @@ def send_to_telegram() -> None:
             )
 
     resp.raise_for_status()
-    print("Sent to Telegram OK")
+
+    # บอกว่าส่งไปที่ไหน จะได้รู้ว่าต้องไปดูข้อความที่แชทไหน (ไม่แสดงเลข chat id เต็ม)
+    result = resp.json()["result"]
+    chat = result["chat"]
+    chat_name = chat.get("title") or chat.get("username") or chat.get("first_name") or "-"
+    chat_id = str(chat["id"])
+    print(f"Sent to Telegram OK: message_id={result['message_id']}")
+    print(f"  chat type: {chat['type']}, name: {chat_name}, id ends with: ...{chat_id[-4:]}")
+
+
+def print_bot_info() -> None:
+    resp = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getMe", timeout=30)
+    resp.raise_for_status()
+    bot = resp.json()["result"]
+    print(f"Bot: @{bot['username']} ({bot['first_name']})")
 
 
 if __name__ == "__main__":
+    print_bot_info()
     take_screenshot()
     send_to_telegram()

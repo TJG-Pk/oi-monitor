@@ -2,38 +2,28 @@ name: OI Monitor Screenshot
 
 on:
   schedule:
-    - cron: "*/30 * * * *"   # ทุก 30 นาที (เวลา UTC)
+    - cron: "7,37 * * * *"   # ทุก 30 นาที (เวลา UTC) เลี่ยงนาทีที่ 0/30 ที่ GitHub คิวแน่นและมักข้ามรอบ
   workflow_dispatch:          # กดรันเองจากแท็บ Actions ได้
+
+# ถ้ารอบก่อนยังไม่เสร็จ ไม่ต้องรันซ้อน
+concurrency:
+  group: oi-monitor
+  cancel-in-progress: false
 
 jobs:
   screenshot:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
 
       - name: Install dependencies
         run: pip install -r requirements.txt
-
-      - name: Check Telegram token (temporary)
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-        run: |
-          python - <<'PY'
-          import os, re, requests
-          t = os.environ["TELEGRAM_BOT_TOKEN"]
-          print("length:", len(t))
-          print("has whitespace:", any(c.isspace() for c in t))
-          print("starts with bot:", t.lower().startswith("bot"))
-          print("format ok:", bool(re.fullmatch(r"\d{6,12}:[A-Za-z0-9_-]{30,}", t)))
-          r = requests.get(f"https://api.telegram.org/bot{t}/getMe", timeout=30)
-          print("getMe status:", r.status_code)
-          PY
 
       - name: Install Chromium
         run: playwright install --with-deps chromium
@@ -44,3 +34,13 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python screenshot_to_telegram.py
+
+      # เก็บภาพไว้ในหน้า Actions ด้วย เปิดดูได้แม้ Telegram ไม่ได้รับ
+      - name: Upload screenshot
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: screenshot
+          path: screenshot.png
+          retention-days: 3
+          if-no-files-found: ignore
