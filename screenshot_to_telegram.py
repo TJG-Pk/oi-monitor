@@ -18,6 +18,7 @@ CLICK_WAIT_SECONDS = int(os.environ.get("CLICK_WAIT_SECONDS", "6"))  # รอห
 VIEWPORT_WIDTH = int(os.environ.get("VIEWPORT_WIDTH", "1600"))
 VIEWPORT_HEIGHT = int(os.environ.get("VIEWPORT_HEIGHT", "1200"))
 TIMEZONE = os.environ.get("TIMEZONE", "Asia/Bangkok")
+TELEGRAM_RETRIES = int(os.environ.get("TELEGRAM_RETRIES", "3"))  # จำนวนครั้งที่ลองส่ง Telegram ถ้าเน็ตหลุด
 
 OUTPUT_FILE = "screenshot.png"
 
@@ -106,29 +107,57 @@ def take_screenshot() -> None:
         browser.close()
 
 
+def post_file(url: str, data: dict, field: str):
+    """ส่งไฟล์ไป Telegram ถ้าการเชื่อมต่อหลุด/timeout/429/5xx จะลองใหม่ (เปิดไฟล์ใหม่ทุกครั้ง)"""
+    for attempt in range(1, TELEGRAM_RETRIES + 1):
+        last = attempt == TELEGRAM_RETRIES
+        try:
+            with open(OUTPUT_FILE, "rb") as f:
+                resp = requests.post(url, data=data, files={field: f}, timeout=60)
+        except requests.exceptions.RequestException as e:
+            if last:
+                raise
+            wait = 5 * attempt
+            print(
+                f"WARN: ส่ง Telegram ไม่สำเร็จ ({attempt}/{TELEGRAM_RETRIES}): {e} "
+                f"ลองใหม่ใน {wait} วินาที",
+                file=sys.stderr,
+            )
+            time.sleep(wait)
+            continue
+
+        if (resp.status_code == 429 or resp.status_code >= 500) and not last:
+            wait = 5 * attempt
+            print(
+                f"WARN: Telegram ตอบ {resp.status_code} ({attempt}/{TELEGRAM_RETRIES}) "
+                f"ลองใหม่ใน {wait} วินาที",
+                file=sys.stderr,
+            )
+            time.sleep(wait)
+            continue
+
+        return resp
+
+
 def send_to_telegram() -> None:
     now = datetime.now(ZoneInfo(TIMEZONE)).strftime("%Y-%m-%d %H:%M")
     caption = f"Intraday OI Monitor\n{now} ({TIMEZONE})"
     base = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
-    with open(OUTPUT_FILE, "rb") as f:
-        resp = requests.post(
-            f"{base}/sendPhoto",
-            data={"chat_id": CHAT_ID, "caption": caption},
-            files={"photo": f},
-            timeout=60,
-        )
+    resp = post_file(
+        f"{base}/sendPhoto",
+        {"chat_id": CHAT_ID, "caption": caption},
+        "photo",
+    )
 
     # ถ้ารูปใหญ่/สูงเกินที่ sendPhoto รับได้ ให้ส่งเป็นไฟล์แทน
     if not resp.ok:
         print(f"sendPhoto failed ({resp.status_code}): {resp.text}", file=sys.stderr)
-        with open(OUTPUT_FILE, "rb") as f:
-            resp = requests.post(
-                f"{base}/sendDocument",
-                data={"chat_id": CHAT_ID, "caption": caption},
-                files={"document": f},
-                timeout=60,
-            )
+        resp = post_file(
+            f"{base}/sendDocument",
+            {"chat_id": CHAT_ID, "caption": caption},
+            "document",
+        )
 
     resp.raise_for_status()
 
@@ -142,7 +171,7 @@ def send_to_telegram() -> None:
 
 
 def print_bot_info() -> None:
-    resp = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getMe", timeout=30)
+    resp = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getMe", timeout="30")
     resp.raise_for_status()
     bot = resp.json()["result"]
     print(f"Bot: @{bot['username']} ({bot['first_name']})")
