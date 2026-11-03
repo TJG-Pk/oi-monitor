@@ -171,7 +171,7 @@ def send_to_telegram() -> None:
 
 
 def print_bot_info() -> None:
-    resp = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getMe", timeout="30")
+    resp = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getMe", timeout=30)
     resp.raise_for_status()
     bot = resp.json()["result"]
     print(f"Bot: @{bot['username']} ({bot['first_name']})")
